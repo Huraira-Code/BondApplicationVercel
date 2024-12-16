@@ -33,28 +33,35 @@ const handleUserSignUp = async (req, res) => {
 const handleUserLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
+
     if (!email || !password) {
-      return res.json({ msg: "all fields are required" });
+      return res.status(400).json({ msg: "All fields are required" });
     }
-    const user = await User.findOne({
-      email: email,
-    });
-    const { _id, name } = user;
-    if (user) {
-      const validated = await bcrypt.compare(password, user.password);
-      if (validated) {
-        const token = jwt.sign({ _id, name }, process.env.JWT_SECRET, {
-          expiresIn: "30d",
-        });
-        return res.json({ msg: "successfully login", token: token });
-      } else {
-        return res.json({ msg: "email or password is incorrect" });
-      }
+
+    const user = await User.findOne({ email });
+
+    // Check if user exists
+    if (!user) {
+      return res.status(401).json({ msg: "Email or password is incorrect" });
+    }
+
+    const validated = await bcrypt.compare(password, user.password);
+
+    if (validated) {
+      const token = jwt.sign(
+        { _id: user._id, name: user.name },
+        process.env.JWT_SECRET,
+        { expiresIn: "30d" }
+      );
+      return res.status(200).json({ msg: "Successfully logged in", token });
     } else {
-      return res.json({ msg: "email or password is incorrect" });
+      return res.status(401).json({ msg: "Email or password is incorrect" });
     }
   } catch (error) {
-    return res.json({ err: error });
+    console.error(error); // Log the error for debugging
+    return res
+      .status(500)
+      .json({ error: error.message || "Internal Server Error" });
   }
 };
 
@@ -82,35 +89,75 @@ const handleAddContact = async (req, res) => {
       userId: _id,
       contactInfo: contactInfo,
     });
+  
 
     return res.json({ msg: "Success", data: userContact });
   }
 };
 
 const handleEditProfile = async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader.split(" ")[1];
-  const verify = jwt.verify(token, process.env.JWT_SECRET);
-  const { _id } = verify;
+  try {
+    // Extract and verify token
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res
+        .status(401)
+        .json({ message: "Authorization header is missing" });
+    }
 
-  const { dateOfBirth, profession, socialMedia, name } = req.body;
-  const profilePicLocalPath = req.files?.profilePic[0]?.path;
-  console.log(profilePicLocalPath);
-  const profilePic = await uploadOnCloudinary(profilePicLocalPath);
+    const token = authHeader.split(" ")[1];
+    const verify = jwt.verify(token, process.env.JWT_SECRET);
+    const { _id } = verify;
 
-  const user = await User.findByIdAndUpdate(
-    { _id: _id },
-    {
-      dateOfBirth: dateOfBirth,
-      profession: profession,
-      socialMedia: socialMedia,
-      profilePic: profilePic.url,
-      name: name,
-    },
-    { new: true }
-  );
+    // Extract data from request
+    const { dateOfBirth, profession, socialMedia, name } = req.body;
+    const profilePicLocalPath = req.files?.profilePic?.[0]?.path;
 
-  res.json({ data: user });
+    // Check if a profile picture was uploaded
+    if (!profilePicLocalPath) {
+      return res.status(400).json({ message: "Profile picture is required" });
+    }
+
+    // Attempt to upload to Cloudinary
+    let profilePic;
+    try {
+      profilePic = await uploadOnCloudinary(profilePicLocalPath);
+    } catch (err) {
+      console.error("Error uploading to Cloudinary:", err);
+      return res
+        .status(500)
+        .json({ message: "Failed to upload image to Cloudinary" });
+    }
+
+    // Update user profile in the database
+    const user = await User.findByIdAndUpdate(
+      { _id: _id },
+      {
+        dateOfBirth,
+        profession,
+        socialMedia,
+        profilePic: profilePic?.url,
+        name,
+      },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Send updated user data in response
+    res.json({ data: user });
+  } catch (err) {
+    console.error("Error handling edit profile:", err);
+
+    // Handle specific errors
+    if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 const handleEditContacts = async (req, res) => {
@@ -120,25 +167,41 @@ const handleEditContacts = async (req, res) => {
   const { _id } = verify;
   console.log(req.body);
   try {
-    // Find the user by userId and update the specific contactInfo by _id
     const result = await Contact.findOneAndUpdate(
-      { userId: _id, "contactInfo._id": req.body.ContactID }, // Find the user and the specific contactInfo by _id
+      { userId: _id, "contactInfo._id": req.body.ContactID }, // Find the user and specific contactInfo by _id
       {
         $set: {
-          "contactInfo.$.category": req.body.category, // Update category
-          "contactInfo.$.email": req.body.email, // Update name
-          "contactInfo.$.contactNumber": req.body.contactNumber, // Update contactNumber
-          "contactInfo.$.recurring.recurringTime": req.body.recurring, // Update contactNumber
+          "contactInfo.$.category": req.body.category,
+          "contactInfo.$.email": req.body.email,
+          "contactInfo.$.contactNumber": req.body.contactNumber,
+          "contactInfo.$.socialMedia": req.body.socialMedia,
+          "contactInfo.$.recurring.recurringTime": req.body.recurring,
+          "contactInfo.$.recurring.customDays": req.body.customDays,
+
         },
       },
       { new: true } // Return the updated document
     );
 
-    if (!result) {
-      throw new Error("User or Contact Info not found");
-    }
+    // Extract the specific contactInfo object by matching the ContactID
+    if (result) {
+      const updatedContact = result.contactInfo.find(
+        (contact) => contact._id.toString() === req.body.ContactID
+      );
 
-    res.status(200).json({ message: "Successful" });
+      if (updatedContact) {
+        console.log("Updated Contact Info:", updatedContact);
+        return res.json({ status: "success", data: updatedContact });
+      } else {
+        return res
+          .status(404)
+          .json({ status: "error", message: "Contact not found" });
+      }
+    } else {
+      return res
+        .status(404)
+        .json({ status: "error", message: "User not found" });
+    }
   } catch (error) {
     console.error("Error updating contact info:", error.message);
     res.status(404).json({ message: "Failed" });
@@ -237,6 +300,146 @@ const handleFilterContact = async (req, res) => {
     const todayData = data.filter((item) => item != null);
     const upcomingData = data2.filter((item) => item != null);
     const overDueData = data3.filter((item) => item != null);
+
+    // 15 Days
+    // urgent today
+    const data13 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 0.5) {
+        const { date } = recurring;
+        let addFifteenDays = new Date(date);
+        addFifteenDays.setTime(
+          addFifteenDays.getTime() + 15 * 24 * 60 * 60 * 1000
+        );
+        let newDate = addFifteenDays.toISOString().split("T")[0];
+
+        if (inputDate === newDate) {
+          return contact;
+        }
+      }
+    });
+
+    // upcoming
+    const data14 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 0.5) {
+        const { date } = recurring;
+        let addFifteenDays = new Date(date);
+        addFifteenDays.setTime(
+          addFifteenDays.getTime() + 15 * 24 * 60 * 60 * 1000
+        );
+        let newDate = addFifteenDays.toISOString().split("T")[0];
+
+        let newDateObj = new Date(newDate);
+        let newDateInMilliseconds = newDateObj.getTime();
+
+        let inputDateObj = new Date(inputDate);
+        let inputDateInMilliseconds = inputDateObj.getTime();
+
+        if (inputDateInMilliseconds < newDateInMilliseconds) {
+          return contact;
+        }
+      }
+    });
+
+    // over due
+    const data15 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 0.5) {
+        const { date } = recurring;
+        let addFifteenDays = new Date(date);
+        addFifteenDays.setTime(
+          addFifteenDays.getTime() + 15 * 24 * 60 * 60 * 1000
+        );
+        let newDate = addFifteenDays.toISOString().split("T")[0];
+
+        let newDateObj = new Date(newDate);
+        let newDateInMilliseconds = newDateObj.getTime();
+
+        let inputDateObj = new Date(inputDate);
+        let inputDateInMilliseconds = inputDateObj.getTime();
+
+        if (inputDateInMilliseconds > newDateInMilliseconds) {
+          return contact;
+        }
+      }
+    });
+
+    
+    const halfMonthTodayData = data13.filter((item) => item != null);
+    const halfMonthUpcomingData = data14.filter((item) => item != null);
+    const halfMonthOverDueData = data15.filter((item) => item != null);
+
+
+    // Customs Days
+    // urgent today
+    const data16 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 10) {
+        const { date } = recurring;
+        let addCustomDay = new Date(date);
+        addCustomDay.setTime(
+          addCustomDay.getTime() + recurring.customDays * 24 * 60 * 60 * 1000
+        );
+        let newDate = addCustomDay.toISOString().split("T")[0];
+
+        if (inputDate === newDate) {
+          return contact;
+        }
+      }
+    });
+
+    // upcoming
+    const data17 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 10) {
+        const { date } = recurring;
+        let addCustomDay = new Date(date);
+        addCustomDay.setTime(
+          addCustomDay.getTime() + recurring.customDays * 24 * 60 * 60 * 1000
+        );
+        let newDate = addCustomDay.toISOString().split("T")[0];
+
+        let newDateObj = new Date(newDate);
+        let newDateInMilliseconds = newDateObj.getTime();
+
+        let inputDateObj = new Date(inputDate);
+        let inputDateInMilliseconds = inputDateObj.getTime();
+
+        if (inputDateInMilliseconds < newDateInMilliseconds) {
+          return contact;
+        }
+      }
+    });
+
+    // over due
+    const data18 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 10) {
+        const { date } = recurring;
+        let addCustomDay = new Date(date);
+        addCustomDay.setTime(
+          addCustomDay.getTime() + recurring.customDays * 24 * 60 * 60 * 1000
+        );
+        let newDate = addCustomDay.toISOString().split("T")[0];
+
+        let newDateObj = new Date(newDate);
+        let newDateInMilliseconds = newDateObj.getTime();
+
+        let inputDateObj = new Date(inputDate);
+        let inputDateInMilliseconds = inputDateObj.getTime();
+
+        if (inputDateInMilliseconds > newDateInMilliseconds) {
+          return contact;
+        }
+      }
+    });
+
+    
+    const customDateTodayData = data16.filter((item) => item != null);
+    const customDateUpcomingData = data17.filter((item) => item != null);
+    const customDateOverDueData = data18.filter((item) => item != null);
+
 
     // Two Month
     // Urgent Today
@@ -374,6 +577,71 @@ const handleFilterContact = async (req, res) => {
     const threeMonthUpcomingData = data8.filter((item) => item != null);
     const threeMonthOverDueData = data9.filter((item) => item != null);
 
+    // Daily
+    // Urgent Today
+    const data10 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 0) {
+        const { date } = recurring;
+        let addOneDay = new Date(date);
+        addOneDay.setTime(addOneDay.getTime() + 24 * 60 * 60 * 1000);
+
+        let newDate = addOneDay.toISOString().split("T")[0];
+
+        if (inputDate === newDate) {
+          return contact;
+        }
+      }
+    });
+
+    // upcoming
+    const data11 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 0) {
+        const { date } = recurring;
+        let addOneDay = new Date(date);
+        addOneDay.setTime(addOneDay.getTime() + 24 * 60 * 60 * 1000);
+
+        let newDate = addOneDay.toISOString().split("T")[0];
+
+        let newDateObj = new Date(newDate);
+        let newDateInMilliseconds = newDateObj.getTime();
+
+        let inputDateObj = new Date(inputDate);
+        let inputDateInMilliseconds = inputDateObj.getTime();
+
+        if (inputDateInMilliseconds < newDateInMilliseconds) {
+          return contact;
+        }
+      }
+    });
+
+    // over due
+    const data12 = contactInfo.map((contact) => {
+      const { recurring } = contact;
+      if (recurring.recurringTime === 0) {
+        const { date } = recurring;
+        let addOneDay = new Date(date);
+        addOneDay.setTime(addOneDay.getTime() + 24 * 60 * 60 * 1000);
+
+        let newDate = addOneDay.toISOString().split("T")[0];
+
+        let newDateObj = new Date(newDate);
+        let newDateInMilliseconds = newDateObj.getTime();
+
+        let inputDateObj = new Date(inputDate);
+        let inputDateInMilliseconds = inputDateObj.getTime();
+
+        if (inputDateInMilliseconds > newDateInMilliseconds) {
+          return contact;
+        }
+      }
+    });
+
+    const DailyTodayData = data10.filter((item) => item != null);
+    const DailyUpcomingData = data11.filter((item) => item != null);
+    const DailyOverDueData = data12.filter((item) => item != null);
+
     return res.json({
       OneMonth: {
         "Urgent Today": todayData,
@@ -390,6 +658,21 @@ const handleFilterContact = async (req, res) => {
         "Upcoming data": threeMonthUpcomingData,
         "Over Due": threeMonthOverDueData,
       },
+      Daily: {
+        "Urgent Today": DailyTodayData,
+        "Upcoming data": DailyUpcomingData,
+        "Over Due": DailyOverDueData,
+      },
+      HalfMonth: {
+        "Urgent Today": halfMonthTodayData,
+        "Upcoming data": halfMonthUpcomingData,
+        "Over Due": halfMonthOverDueData,
+      },
+      CustomDate: {
+        "Urgent Today": customDateTodayData,
+        "Upcoming data": customDateUpcomingData,
+        "Over Due": customDateOverDueData,
+      }
     });
   } catch (error) {
     res.json({ status: "failed", msg: error.message });

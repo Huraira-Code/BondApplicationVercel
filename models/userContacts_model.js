@@ -30,9 +30,7 @@ const userContactsSchema = new mongoose.Schema(
           type: Date,
         },
         socialMedia: {
-          fb: String,
-          insta: String,
-          linkedIn: String,
+          type: [String], // Array of strings to allow flexible number of links
         },
         specificDate: {
           date: {
@@ -52,6 +50,10 @@ const userContactsSchema = new mongoose.Schema(
             type: Number,
             required: true,
           },
+          customDays : {
+            type : Number,
+            default:null
+          }
         },
         lastContacted: [Date],
       },
