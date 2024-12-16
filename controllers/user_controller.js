@@ -31,6 +31,7 @@ const handleUserSignUp = async (req, res) => {
 };
 
 const handleUserLogin = async (req, res) => {
+  console.log(process.env.JWT_SECRET)
   try {
     const { email, password } = req.body;
 
