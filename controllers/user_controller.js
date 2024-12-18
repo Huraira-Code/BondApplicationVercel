@@ -48,7 +48,7 @@ const handleUserLogin = async (req, res) => {
 
     const validated = await bcrypt.compare(password, user.password);
 
-    if (validated) {
+    if (validated  || req.body.google) {
       const token = jwt.sign(
         { _id: user._id, name: user.name },
         process.env.JWT_SECRET,
