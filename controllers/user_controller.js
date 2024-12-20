@@ -849,8 +849,8 @@ const levelIncrease = async (_id) => {
       console.log("Updated User:", userContact);
       return { success: true, user: userContact };
     } else {
-      console.log("User not found.");
-      return { success: false, msg: "User not found." };
+      const existingUser = await User.findById(_id);
+      return { success: false, user: existingUser };
     }
   } catch (error) {
     console.error("Error updating user:", error.message);
