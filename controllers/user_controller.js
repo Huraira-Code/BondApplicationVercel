@@ -950,7 +950,7 @@ module.exports = {
   handleExtendDate,
   getAllContacts,
   sendSupportEmail,
-  deleteConta ct,
+  deleteContact,
   changePassword,
   handleEditContacts,
   burnedLogDone,
