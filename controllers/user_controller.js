@@ -839,7 +839,7 @@ const levelIncrease = async (_id) => {
     const userContact = await User.findOneAndUpdate(
       { 
         _id: _id, 
-        $expr: { $lt: ["$unburnedLog", 11] } // Condition: unburnedLog < 11
+        $expr: { $lt: ["$unburnedLog", 10] } // Condition: unburnedLog < 11
       },
       { $inc: { unburnedLog: 1 } }, // Increment unburnedLog by 1
       { new: true } // Return the updated document
@@ -880,43 +880,26 @@ const burnedLogDone = async (req, res) => {
           $set: {
             burnedLog: {
               $cond: {
-                if: {
-                  $and: [
-                    { $lt: ["$burnedLog", 7] },
-                    { $gt: ["$unburnedLog", 0] },
-                  ],
-                },
-                then: { $add: ["$burnedLog", 1] },
-                else: {
-                  $cond: {
-                    if: { $eq: ["$burnedLog", 7] },
-                    then: 0, // Set burnedLog to 0 when unburnedLog is 8
-                    else: "$burnedLog",
-                  },
-                },
-              },
+                if: { $eq: ["$burnedLog", 9] }, // When burnedLog reaches 9, increment to 10, then reset to 0
+                then: 0,
+                else: { $add: ["$burnedLog", 1] }
+              }
+            },
+            level: {
+              $cond: {
+                if: { $eq: ["$burnedLog", 9] }, // Increase level when burnedLog reaches 9 (before reset)
+                then: { $add: ["$level", 1] },
+                else: "$level"
+              }
             },
             unburnedLog: {
               $cond: {
-                if: {
-                  $and: [
-                    { $lt: ["$burnedLog", 8] },
-                    { $gt: ["$unburnedLog", 0] },
-                  ],
-                },
-                then: { $subtract: ["$unburnedLog", 1] },
-                else: "$unburnedLog",
-              },
-            },
-
-            level: {
-              $cond: {
-                if: { $eq: ["$burnedLog", 7] },
-                then: { $add: ["$level", 1] },
-                else: "$level",
-              },
-            },
-          },
+                if: { $eq: ["$burnedLog", 9] }, // Reset unburnedLog to 0 when burnedLog reaches 9
+                then: 0,
+                else: "$unburnedLog"
+              }
+            }
+          }
         },
       ],
       { new: true } // Return the updated document
