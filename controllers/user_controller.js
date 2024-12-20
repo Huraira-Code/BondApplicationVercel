@@ -837,7 +837,10 @@ const levelIncrease = async (_id) => {
   console.log(_id);
   try {
     const userContact = await User.findOneAndUpdate(
-      { _id: _id }, // Find the user by userId
+      { 
+        _id: _id, 
+        $expr: { $lt: ["$unburnedLog", 11] } // Condition: unburnedLog < 11
+      },
       { $inc: { unburnedLog: 1 } }, // Increment unburnedLog by 1
       { new: true } // Return the updated document
     );
@@ -947,7 +950,7 @@ module.exports = {
   handleExtendDate,
   getAllContacts,
   sendSupportEmail,
-  deleteContact,
+  deleteConta ct,
   changePassword,
   handleEditContacts,
   burnedLogDone,
