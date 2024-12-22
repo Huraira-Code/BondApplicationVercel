@@ -1,9 +1,203 @@
 const User = require("../models/user_model");
 const Contact = require("../models/userContacts_model");
+const VerificationToken = require("../models/verificationToken_model.js");
 const uploadOnCloudinary = require("../utils/cloudinary.js");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const sendMail = require("../utils/nodemailer.js");
+const sendTokenMail = require("../utils/nodemailer.js");
+
+
+
+const createAndSendToken = async (userId , reciever) => {
+  const randomToken = Math.floor(Math.random() * (99999 - 10000 + 1)) + 10000;
+  const randomTokenString = String(randomToken); // Converts the number to a string
+
+  try {
+    // Check if userId already exists in the VerificationToken table
+    let existingToken = await VerificationToken.findOne({ owner: userId });
+
+    if (existingToken) {
+      // Update the existing token
+
+      existingToken.token = randomTokenString;
+      await existingToken.save(); // Save changes to the database
+      try {
+        await sendTokenMail(
+          "Reminder Application Token Provider",
+          randomTokenString,
+          reciever
+        );
+        return { status: "success" };
+      } catch (error) {
+        return { status: "failed", msg: error.message };
+      }
+    } else {
+      // Create a new token if userId does not exist
+      const newToken = await VerificationToken.create({
+        owner: userId,
+        token: randomTokenString,
+      });
+      try {
+        await sendTokenMail(
+          "Reminder Application Token Provider",
+          randomTokenString,
+          reciever
+        );
+        return { status: "success" };
+      } catch (error) {
+        return { status: "failed", msg: error.message };
+      }
+    }
+  } catch (error) {
+    console.error("Error handling verification token:", error.message);
+    throw error; // Throw the error for further handling
+  }
+};
+
+
+const handleRepeatTokenSend = async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader.split(" ")[1];
+  const verify = jwt.verify(token, process.env.JWT_SECRET);
+  console.log(verify)
+  try{
+    const createTokenResult = await createAndSendToken(verify._id , verify.email);
+    res.status(200).json({ msg : "Token have been succesfully sended to your email"})
+  }catch (error){
+    res.status(404).json({ msg : error})
+
+  }
+  
+};
+
+
+
+const VerifyToken = async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader.split(" ")[1];
+  try {
+    const verify = jwt.verify(token, process.env.JWT_SECRET);
+    const id = verify._id;
+
+    const tokenEntry = await VerificationToken.findOne({ owner: id });
+    if (!tokenEntry) {
+      return res.status(404).json({ status: "Error", msg: "Token entry not found" });
+    }
+
+    const sendedToken = req.body.token;
+    const validated = await bcrypt.compare(sendedToken, tokenEntry.token);
+    if (validated) {
+      // Update the user's verified field to true after successful validation
+      const updatedUser = await User.findOneAndUpdate(
+        { _id: id },  // Find the user by ID
+        { Verified: true },  // Set the verified field to true
+        { new: true }  // Return the updated document
+      );
+
+      if (!updatedUser) {
+        return res.status(404).json({ status: "Error", msg: "User not found" });
+      }
+
+      return res.status(200).json({
+        status: "Matched Successfully",
+        msg: "You have entered the right code",
+        user: updatedUser
+      });
+    } else {
+      return res.status(400).json({
+        status: "OTP Code Not Matched",
+        msg: "You have entered the wrong OTP Code"
+      });
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ status: "Error", msg: "An internal error occurred", error: error.message });
+  }
+};
+
+
+const forgetPasswordSend = async (req, res) => {
+  try {
+    const { email } = req.body; // Extract email from request body
+
+    // Find user by email
+    const user = await User.findOne({ email });
+
+    // Check if user exists
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const createTokenResult = await createAndSendToken(user._id , user.email);
+    res.status(200).json(createTokenResult)
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+
+
+
+const forgetPasswordChange = async (req, res) => {
+  try {
+    // Retrieve user by email (assuming email is provided in the request body)
+    const user = await User.findOne({ email: req.body.email });
+    if (!user) {
+      return res.status(404).json({ status: "Error", msg: "User not found" });
+    }
+
+    // Find the verification token associated with the user
+    const tokenEntry = await VerificationToken.findOne({ owner: user._id });
+    if (!tokenEntry) {
+      return res.status(404).json({ status: "Error", msg: "Token entry not found" });
+    }
+
+    const sendedToken = req.body.token;
+    const password = req.body.password;
+
+    // Validate the token
+    console.log(sendedToken)
+    console.log(tokenEntry.token)
+    const validated = await bcrypt.compare(sendedToken, tokenEntry.token);
+    if (validated) {
+      // Hash the new password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Update the user's password
+      const updatedUser = await User.findByIdAndUpdate(
+        user._id,
+        { password: hashedPassword },
+        { new: true } // Return the updated document
+      );
+
+      if (!updatedUser) {
+        return res.status(404).json({ status: "Error", msg: "User update failed" });
+      }
+
+      return res.status(200).json({
+        status: "Password Changed",
+        msg: "You have successfully changed the password",
+        user: updatedUser
+      });
+    } else {
+      return res.status(400).json({
+        status: "OTP Code Not Matched",
+        msg: "You have entered the wrong OTP Code"
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      status: "Error",
+      msg: "An internal error occurred",
+      error: error.message
+    });
+  }
+};
+
+
+
 
 const handleUserSignUp = async (req, res) => {
   try {
@@ -19,8 +213,9 @@ const handleUserSignUp = async (req, res) => {
       password: hashedPassword,
     });
     if (user) {
+      const createTokenResult = await createAndSendToken(user._id , user.email);
       const { _id, name } = user;
-      const token = jwt.sign({ _id, name }, process.env.JWT_SECRET, {
+      const token = jwt.sign({ _id, name , email }, process.env.JWT_SECRET, {
         expiresIn: "30d",
       });
       return res.json({ msg: "Succesfully Signed Up", token: token });
@@ -31,7 +226,7 @@ const handleUserSignUp = async (req, res) => {
 };
 
 const handleUserLogin = async (req, res) => {
-  console.log(process.env.JWT_SECRET)
+  console.log(process.env.JWT_SECRET);
   try {
     const { email, password } = req.body;
 
@@ -48,9 +243,9 @@ const handleUserLogin = async (req, res) => {
 
     const validated = await bcrypt.compare(password, user.password);
 
-    if (validated  || req.body.google) {
+    if (validated || req.body.google) {
       const token = jwt.sign(
-        { _id: user._id, name: user.name },
+        { _id: user._id, name: user.name , email : user.email },
         process.env.JWT_SECRET,
         { expiresIn: "30d" }
       );
@@ -90,7 +285,6 @@ const handleAddContact = async (req, res) => {
       userId: _id,
       contactInfo: contactInfo,
     });
-  
 
     return res.json({ msg: "Success", data: userContact });
   }
@@ -178,7 +372,6 @@ const handleEditContacts = async (req, res) => {
           "contactInfo.$.socialMedia": req.body.socialMedia,
           "contactInfo.$.recurring.recurringTime": req.body.recurring,
           "contactInfo.$.recurring.customDays": req.body.customDays,
-
         },
       },
       { new: true } // Return the updated document
@@ -366,11 +559,9 @@ const handleFilterContact = async (req, res) => {
       }
     });
 
-    
     const halfMonthTodayData = data13.filter((item) => item != null);
     const halfMonthUpcomingData = data14.filter((item) => item != null);
     const halfMonthOverDueData = data15.filter((item) => item != null);
-
 
     // Customs Days
     // urgent today
@@ -436,11 +627,9 @@ const handleFilterContact = async (req, res) => {
       }
     });
 
-    
     const customDateTodayData = data16.filter((item) => item != null);
     const customDateUpcomingData = data17.filter((item) => item != null);
     const customDateOverDueData = data18.filter((item) => item != null);
-
 
     // Two Month
     // Urgent Today
@@ -673,7 +862,7 @@ const handleFilterContact = async (req, res) => {
         "Urgent Today": customDateTodayData,
         "Upcoming data": customDateUpcomingData,
         "Over Due": customDateOverDueData,
-      }
+      },
     });
   } catch (error) {
     res.json({ status: "failed", msg: error.message });
@@ -837,9 +1026,9 @@ const levelIncrease = async (_id) => {
   console.log(_id);
   try {
     const userContact = await User.findOneAndUpdate(
-      { 
-        _id: _id, 
-        $expr: { $lt: ["$unburnedLog", 10] } // Condition: unburnedLog < 11
+      {
+        _id: _id,
+        $expr: { $lt: ["$unburnedLog", 10] }, // Condition: unburnedLog < 11
       },
       { $inc: { unburnedLog: 1 } }, // Increment unburnedLog by 1
       { new: true } // Return the updated document
@@ -882,24 +1071,24 @@ const burnedLogDone = async (req, res) => {
               $cond: {
                 if: { $eq: ["$burnedLog", 9] }, // When burnedLog reaches 9, increment to 10, then reset to 0
                 then: 0,
-                else: { $add: ["$burnedLog", 1] }
-              }
+                else: { $add: ["$burnedLog", 1] },
+              },
             },
             level: {
               $cond: {
                 if: { $eq: ["$burnedLog", 9] }, // Increase level when burnedLog reaches 9 (before reset)
                 then: { $add: ["$level", 1] },
-                else: "$level"
-              }
+                else: "$level",
+              },
             },
             unburnedLog: {
               $cond: {
                 if: { $eq: ["$burnedLog", 9] }, // Reset unburnedLog to 0 when burnedLog reaches 9
                 then: 0,
-                else: "$unburnedLog"
-              }
-            }
-          }
+                else: "$unburnedLog",
+              },
+            },
+          },
         },
       ],
       { new: true } // Return the updated document
@@ -937,4 +1126,9 @@ module.exports = {
   changePassword,
   handleEditContacts,
   burnedLogDone,
+  handleRepeatTokenSend,
+  VerifyToken,
+  forgetPasswordChange,
+  forgetPasswordSend
+
 };

@@ -24,10 +24,20 @@ const sendMail = async (sub, msg) => {
   }
 };
 
-module.exports = sendMail;
+const sendTokenMail = async (sub, msg , reciever) => {
+  try {
+    transporter.sendMail({
+      to: reciever,
+      subject: sub,
+      html: msg,
+    });
 
-// sendMail(
-//   "hurairashahid0@gmail.com",
-//   "Remider App Support",
-//   "This is my question"
-// );
+    console.log("Email Sent");
+  } catch (error) {
+    console.log("sending mail error");
+  }
+};
+
+module.exports = sendMail;
+module.exports = sendTokenMail;
+

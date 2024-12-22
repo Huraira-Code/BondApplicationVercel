@@ -15,6 +15,10 @@ const {
   changePassword,
   handleEditContacts,
   burnedLogDone,
+  handleRepeatTokenSend,
+  VerifyToken,
+  forgetPasswordChange,
+  forgetPasswordSend
 } = require("../controllers/user_controller");
 const router = express.Router();
 
@@ -24,6 +28,10 @@ router.route("/login").post(handleUserLogin);
 
 // Home Page
 router.route("/addContact").post(handleAddContact);
+router.route("/SendRepeatToken").post(handleRepeatTokenSend);
+router.route("/verifyToken").post(VerifyToken);
+router.route("/forgetPasswordChange").post(forgetPasswordChange);
+router.route("/forgetPasswordSend").post(forgetPasswordSend);
 router.route("/viewProfile").get(handleViewProfile);
 router.route("/filtercontacts").post(handleFilterContact);
 router.route("/getallcontacts").post(getAllContacts);
