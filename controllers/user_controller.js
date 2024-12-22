@@ -153,31 +153,29 @@ const forgetPasswordChange = async (req, res) => {
     }
 
     const sendedToken = req.body.token;
-    const password = req.body.password;
-
     // Validate the token
     console.log(sendedToken)
     console.log(tokenEntry.token)
     const validated = await bcrypt.compare(sendedToken, tokenEntry.token);
     if (validated) {
       // Hash the new password
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
+      // const salt = await bcrypt.genSalt(10);
+      // const hashedPassword = await bcrypt.hash(password, salt);
 
-      // Update the user's password
-      const updatedUser = await User.findByIdAndUpdate(
-        user._id,
-        { password: hashedPassword },
-        { new: true } // Return the updated document
-      );
+      // // Update the user's password
+      // const updatedUser = await User.findByIdAndUpdate(
+      //   user._id,
+      //   { password: hashedPassword },
+      //   { new: true } // Return the updated document
+      // );
 
-      if (!updatedUser) {
-        return res.status(404).json({ status: "Error", msg: "User update failed" });
-      }
+      // if (!updatedUser) {
+      //   return res.status(404).json({ status: "Error", msg: "User update failed" });
+      // }
 
       return res.status(200).json({
-        status: "Password Changed",
-        msg: "You have successfully changed the password",
+        status: "OTP MATCHED",
+        msg: "OTP Have Successfull mathced",
         user: updatedUser
       });
     } else {
