@@ -18,7 +18,9 @@ const {
   handleRepeatTokenSend,
   VerifyToken,
   forgetPasswordChange,
-  forgetPasswordSend
+  forgetPasswordSend,
+  chnagePassword,
+  changeForgetPassword
 } = require("../controllers/user_controller");
 const router = express.Router();
 
@@ -42,6 +44,7 @@ router.route("/changePassword").post(changePassword);
 router.route("/deletecontact").delete(deleteContact);
 router.route("/editContacts").post(handleEditContacts);
 router.route("/burnedLogDone").post(burnedLogDone);
+router.route("/changeForgetPassword").post(changeForgetPassword);
 
 router
   .route("/editProfile")

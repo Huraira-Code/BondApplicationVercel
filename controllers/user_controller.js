@@ -7,9 +7,7 @@ const bcrypt = require("bcryptjs");
 const sendMail = require("../utils/nodemailer.js");
 const sendTokenMail = require("../utils/nodemailer.js");
 
-
-
-const createAndSendToken = async (userId , reciever) => {
+const createAndSendToken = async (userId, reciever) => {
   const randomToken = Math.floor(Math.random() * (99999 - 10000 + 1)) + 10000;
   const randomTokenString = String(randomToken); // Converts the number to a string
 
@@ -55,23 +53,23 @@ const createAndSendToken = async (userId , reciever) => {
   }
 };
 
-
 const handleRepeatTokenSend = async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader.split(" ")[1];
   const verify = jwt.verify(token, process.env.JWT_SECRET);
-  console.log(verify)
-  try{
-    const createTokenResult = await createAndSendToken(verify._id , verify.email);
-    res.status(200).json({ msg : "Token have been succesfully sended to your email"})
-  }catch (error){
-    res.status(404).json({ msg : error})
-
+  console.log(verify);
+  try {
+    const createTokenResult = await createAndSendToken(
+      verify._id,
+      verify.email
+    );
+    res
+      .status(200)
+      .json({ msg: "Token have been succesfully sended to your email" });
+  } catch (error) {
+    res.status(404).json({ msg: error });
   }
-  
 };
-
-
 
 const VerifyToken = async (req, res) => {
   const authHeader = req.headers.authorization;
@@ -82,7 +80,9 @@ const VerifyToken = async (req, res) => {
 
     const tokenEntry = await VerificationToken.findOne({ owner: id });
     if (!tokenEntry) {
-      return res.status(404).json({ status: "Error", msg: "Token entry not found" });
+      return res
+        .status(404)
+        .json({ status: "Error", msg: "Token entry not found" });
     }
 
     const sendedToken = req.body.token;
@@ -90,9 +90,9 @@ const VerifyToken = async (req, res) => {
     if (validated) {
       // Update the user's verified field to true after successful validation
       const updatedUser = await User.findOneAndUpdate(
-        { _id: id },  // Find the user by ID
-        { Verified: true },  // Set the verified field to true
-        { new: true }  // Return the updated document
+        { _id: id }, // Find the user by ID
+        { Verified: true }, // Set the verified field to true
+        { new: true } // Return the updated document
       );
 
       if (!updatedUser) {
@@ -102,20 +102,52 @@ const VerifyToken = async (req, res) => {
       return res.status(200).json({
         status: "Matched Successfully",
         msg: "You have entered the right code",
-        user: updatedUser
+        user: updatedUser,
       });
     } else {
       return res.status(400).json({
         status: "OTP Code Not Matched",
-        msg: "You have entered the wrong OTP Code"
+        msg: "You have entered the wrong OTP Code",
       });
     }
   } catch (error) {
     console.log(error);
-    return res.status(500).json({ status: "Error", msg: "An internal error occurred", error: error.message });
+    return res
+      .status(500)
+      .json({
+        status: "Error",
+        msg: "An internal error occurred",
+        error: error.message,
+      });
   }
 };
 
+const changeForgetPassword = async (req, res) => {
+  const password = req.body.password
+  const email = req.body.email
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Update the user's password
+    const updatedUser = await User.findOneAndUpdate(
+      { email: email }, // Find user by email
+      { password: hashedPassword }, // Update the password
+      { new: true } // Return the updated document
+    );
+    
+    if (!updatedUser) {
+      return res
+        .status(404)
+        .json({ status: "Error", msg: "User update failed" });
+    }
+
+    res.status(200).json({msg : "Password have been succesfully changed"})
+  } catch (error) {
+    console.log(error);
+  }
+};
 
 const forgetPasswordSend = async (req, res) => {
   try {
@@ -128,15 +160,12 @@ const forgetPasswordSend = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    const createTokenResult = await createAndSendToken(user._id , user.email);
-    res.status(200).json(createTokenResult)
+    const createTokenResult = await createAndSendToken(user._id, user.email);
+    res.status(200).json(createTokenResult);
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
-
-
 
 const forgetPasswordChange = async (req, res) => {
   try {
@@ -149,30 +178,17 @@ const forgetPasswordChange = async (req, res) => {
     // Find the verification token associated with the user
     const tokenEntry = await VerificationToken.findOne({ owner: user._id });
     if (!tokenEntry) {
-      return res.status(404).json({ status: "Error", msg: "Token entry not found" });
+      return res
+        .status(404)
+        .json({ status: "Error", msg: "Token entry not found" });
     }
 
     const sendedToken = req.body.token;
     // Validate the token
-    console.log(sendedToken)
-    console.log(tokenEntry.token)
+    console.log(sendedToken);
+    console.log(tokenEntry.token);
     const validated = await bcrypt.compare(sendedToken, tokenEntry.token);
     if (validated) {
-      // Hash the new password
-      // const salt = await bcrypt.genSalt(10);
-      // const hashedPassword = await bcrypt.hash(password, salt);
-
-      // // Update the user's password
-      // const updatedUser = await User.findByIdAndUpdate(
-      //   user._id,
-      //   { password: hashedPassword },
-      //   { new: true } // Return the updated document
-      // );
-
-      // if (!updatedUser) {
-      //   return res.status(404).json({ status: "Error", msg: "User update failed" });
-      // }
-
       return res.status(200).json({
         status: "OTP MATCHED",
         msg: "OTP Have Successfull mathced",
@@ -180,7 +196,7 @@ const forgetPasswordChange = async (req, res) => {
     } else {
       return res.status(400).json({
         status: "OTP Code Not Matched",
-        msg: "You have entered the wrong OTP Code"
+        msg: "You have entered the wrong OTP Code",
       });
     }
   } catch (error) {
@@ -188,13 +204,10 @@ const forgetPasswordChange = async (req, res) => {
     return res.status(500).json({
       status: "Error",
       msg: "An internal error occurred",
-      error: error.message
+      error: error.message,
     });
   }
 };
-
-
-
 
 const handleUserSignUp = async (req, res) => {
   try {
@@ -210,9 +223,9 @@ const handleUserSignUp = async (req, res) => {
       password: hashedPassword,
     });
     if (user) {
-      const createTokenResult = await createAndSendToken(user._id , user.email);
+      const createTokenResult = await createAndSendToken(user._id, user.email);
       const { _id, name } = user;
-      const token = jwt.sign({ _id, name , email }, process.env.JWT_SECRET, {
+      const token = jwt.sign({ _id, name, email }, process.env.JWT_SECRET, {
         expiresIn: "30d",
       });
       return res.json({ msg: "Succesfully Signed Up", token: token });
@@ -242,7 +255,7 @@ const handleUserLogin = async (req, res) => {
 
     if (validated || req.body.google) {
       const token = jwt.sign(
-        { _id: user._id, name: user.name , email : user.email },
+        { _id: user._id, name: user.name, email: user.email },
         process.env.JWT_SECRET,
         { expiresIn: "30d" }
       );
@@ -1126,6 +1139,6 @@ module.exports = {
   handleRepeatTokenSend,
   VerifyToken,
   forgetPasswordChange,
-  forgetPasswordSend
-
+  forgetPasswordSend,
+  changeForgetPassword
 };
