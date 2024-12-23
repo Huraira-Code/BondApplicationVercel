@@ -176,7 +176,6 @@ const forgetPasswordChange = async (req, res) => {
       return res.status(200).json({
         status: "OTP MATCHED",
         msg: "OTP Have Successfull mathced",
-        user: updatedUser
       });
     } else {
       return res.status(400).json({
