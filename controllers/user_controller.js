@@ -14,36 +14,45 @@ const createAndSendToken = async (userId, reciever) => {
   try {
     // Check if userId already exists in the VerificationToken table
     let existingToken = await VerificationToken.findOne({ owner: userId });
-
+    console.log(existingToken);
     if (existingToken) {
       // Update the existing token
 
-      existingToken.token = randomTokenString;
-      await existingToken.save(); // Save changes to the database
       try {
+        // Update the token value and save it to the database
+        existingToken.token = randomTokenString;
+        await existingToken.save(); // Save changes
+
+        // If saving is successful, proceed to send the email
         await sendTokenMail(
           "Reminder Application Token Provider",
           randomTokenString,
           reciever
         );
-        return { status: "success" };
+
+        return { status: "success" }; // Both operations succeeded
       } catch (error) {
+        // Catch any errors during saving or email sending
         return { status: "failed", msg: error.message };
       }
     } else {
-      // Create a new token if userId does not exist
-      const newToken = await VerificationToken.create({
-        owner: userId,
-        token: randomTokenString,
-      });
       try {
+        // Create a new verification token entry
+        const newToken = await VerificationToken.create({
+          owner: userId,
+          token: randomTokenString,
+        });
+
+        // If the token creation succeeds, proceed to send the email
         await sendTokenMail(
           "Reminder Application Token Provider",
           randomTokenString,
           reciever
         );
-        return { status: "success" };
+
+        return { status: "success" }; // Both operations succeeded
       } catch (error) {
+        // Catch any errors during token creation or email sending
         return { status: "failed", msg: error.message };
       }
     }
@@ -112,19 +121,17 @@ const VerifyToken = async (req, res) => {
     }
   } catch (error) {
     console.log(error);
-    return res
-      .status(500)
-      .json({
-        status: "Error",
-        msg: "An internal error occurred",
-        error: error.message,
-      });
+    return res.status(500).json({
+      status: "Error",
+      msg: "An internal error occurred",
+      error: error.message,
+    });
   }
 };
 
 const changeForgetPassword = async (req, res) => {
-  const password = req.body.password
-  const email = req.body.email
+  const password = req.body.password;
+  const email = req.body.email;
 
   try {
     const salt = await bcrypt.genSalt(10);
@@ -136,14 +143,14 @@ const changeForgetPassword = async (req, res) => {
       { password: hashedPassword }, // Update the password
       { new: true } // Return the updated document
     );
-    
+
     if (!updatedUser) {
       return res
         .status(404)
         .json({ status: "Error", msg: "User update failed" });
     }
 
-    res.status(200).json({msg : "Password have been succesfully changed"})
+    res.status(200).json({ msg: "Password have been succesfully changed" });
   } catch (error) {
     console.log(error);
   }
@@ -1140,5 +1147,5 @@ module.exports = {
   VerifyToken,
   forgetPasswordChange,
   forgetPasswordSend,
-  changeForgetPassword
+  changeForgetPassword,
 };
