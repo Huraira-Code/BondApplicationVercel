@@ -24,19 +24,23 @@ const sendMail = async (sub, msg) => {
   }
 };
 
-const sendTokenMail = async (sub, msg , reciever) => {
+const sendTokenMail = async (sub, msg, reciever) => {
   try {
-    transporter.sendMail({
+    const info = await transporter.sendMail({
       to: reciever,
       subject: sub,
       html: msg,
     });
 
-    console.log("Email Sent");
+    console.log("Email Sent Successfully:", info.messageId);  // Log the sent email's message ID
   } catch (error) {
-    console.log("sending mail error");
+    console.error("Error sending email:", error);  // Log detailed error
+    if (error.response) {
+      console.error("SMTP Response Error:", error.response.body);  // If available, log the SMTP response
+    }
   }
 };
+
 
 module.exports = sendMail;
 module.exports = sendTokenMail;
