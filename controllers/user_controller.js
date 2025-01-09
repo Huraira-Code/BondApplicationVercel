@@ -383,6 +383,7 @@ const handleEditContacts = async (req, res) => {
       { userId: _id, "contactInfo._id": req.body.ContactID }, // Find the user and specific contactInfo by _id
       {
         $set: {
+          "contactInfo.$.profilePic": req.body.profilePic,
           "contactInfo.$.category": req.body.category,
           "contactInfo.$.email": req.body.email,
           "contactInfo.$.contactNumber": req.body.contactNumber,
